@@ -37,6 +37,48 @@ interface TemplateLightboxProps {
   onClose: () => void;
 }
 
+/* Hand the template off to the CapCut app. Android Chrome resolves
+   intent:// against the installed app and falls back to the web page
+   on its own; iOS gets the capcut:// scheme plus a timed fallback to
+   the web page when the app never takes over. The scheme matches
+   CapCut's own smart-app-banner metadata. */
+function openTemplate(template: Template) {
+  const ua = navigator.userAgent;
+  const isAndroid = /android/i.test(ua);
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+
+  if (!isAndroid && !isIOS) {
+    window.open(template.url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  if (isAndroid) {
+    const fallback = encodeURIComponent(template.url);
+    window.location.href =
+      `intent://template/detail?template_id=${template.id}#Intent;scheme=capcut;package=com.lemon.lvoverseas;S.browser_fallback_url=${fallback};end`;
+    return;
+  }
+
+  let handedOff = false;
+  const onVisibility = () => {
+    if (document.hidden) handedOff = true;
+  };
+  const onPageHide = () => {
+    handedOff = true;
+  };
+  const cleanup = () => {
+    document.removeEventListener("visibilitychange", onVisibility);
+    window.removeEventListener("pagehide", onPageHide);
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+  window.addEventListener("pagehide", onPageHide);
+  window.location.href = `capcut://template/detail?template_id=${template.id}`;
+  window.setTimeout(() => {
+    cleanup();
+    if (!handedOff && !document.hidden) window.location.href = template.url;
+  }, 1500);
+}
+
 export function TemplateLightbox({ template, onClose }: TemplateLightboxProps) {
   const reduce = useReducedMotion();
   const { t } = useI18n();
@@ -91,6 +133,14 @@ export function TemplateLightbox({ template, onClose }: TemplateLightboxProps) {
         transition={{ duration: 0.32, ease: EASE }}
         className="relative z-10 grid max-h-[92dvh] w-full max-w-4xl grid-cols-1 gap-5 overflow-y-auto rounded-2xl border border-line bg-elev p-4 focus:outline-none md:grid-cols-[minmax(0,300px)_1fr] md:gap-7 md:p-7"
       >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t.lightbox.close}
+          className="absolute right-3 top-3 z-20 grid h-10 w-10 place-items-center rounded-full border border-line bg-elev/90 text-dim backdrop-blur-sm transition-colors duration-200 hover:border-line-strong hover:text-fg md:right-5 md:top-5"
+        >
+          <X size={18} />
+        </button>
         {template.videoUrl ? (
           <video
             key={template.id}
@@ -114,19 +164,9 @@ export function TemplateLightbox({ template, onClose }: TemplateLightboxProps) {
         )}
 
         <div className="flex min-w-0 flex-col">
-          <div className="flex items-start justify-between gap-4">
-            <h2 className="text-2xl font-black uppercase leading-[1.05] tracking-[-0.02em] md:text-3xl">
-              {template.title}
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={t.lightbox.close}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-line text-dim transition-colors duration-200 hover:border-line-strong hover:text-fg"
-            >
-              <X size={18} />
-            </button>
-          </div>
+          <h2 className="text-2xl font-black uppercase leading-[1.05] tracking-[-0.02em] md:pr-12 md:text-3xl">
+            {template.title}
+          </h2>
 
           {template.description ? (
             <p className="mt-3 break-words font-mono text-xs leading-relaxed text-dim">
@@ -166,15 +206,14 @@ export function TemplateLightbox({ template, onClose }: TemplateLightboxProps) {
 
           <div className="mt-auto pt-6">
             <div className="flex flex-wrap gap-3">
-              <a
-                href={template.url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => openTemplate(template)}
                 className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-bold uppercase tracking-[0.06em] text-accent-fg transition-transform duration-200 hover:-translate-y-px active:scale-[0.97]"
               >
                 {t.lightbox.useTemplate}
                 <ArrowSquareOut size={16} />
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={copyLink}
