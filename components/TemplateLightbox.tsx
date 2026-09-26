@@ -37,11 +37,13 @@ interface TemplateLightboxProps {
   onClose: () => void;
 }
 
-/* Hand the template off to the CapCut app. Android Chrome resolves
-   intent:// against the installed app and falls back to the web page
-   on its own; iOS gets the capcut:// scheme plus a timed fallback to
-   the web page when the app never takes over. The scheme matches
-   CapCut's own smart-app-banner metadata. */
+/* Hand the template off to the CapCut app without ever navigating the
+   search page away. Android Chrome resolves intent:// inside a new tab
+   (app opens when installed; otherwise that tab lands on capcut.com via
+   its browser_fallback_url). iOS gets the capcut:// scheme from the
+   same tab; when the app never takes over, the web page opens in a new
+   tab instead. Desktop always opens capcut.com in a new tab. The scheme
+   matches CapCut's own smart-app-banner metadata. */
 function openTemplate(template: Template) {
   const ua = navigator.userAgent;
   const isAndroid = /android/i.test(ua);
@@ -53,9 +55,10 @@ function openTemplate(template: Template) {
   }
 
   if (isAndroid) {
-    const fallback = encodeURIComponent(template.url);
-    window.location.href =
-      `intent://template/detail?template_id=${template.id}#Intent;scheme=capcut;package=com.lemon.lvoverseas;S.browser_fallback_url=${fallback};end`;
+    const intent =
+      `intent://template/detail?template_id=${template.id}#Intent;scheme=capcut;package=com.lemon.lvoverseas;S.browser_fallback_url=${encodeURIComponent(template.url)};end`;
+    const win = window.open(intent, "_blank");
+    if (!win) window.location.href = intent; // popup blocked: last resort
     return;
   }
 
@@ -75,7 +78,7 @@ function openTemplate(template: Template) {
   window.location.href = `capcut://template/detail?template_id=${template.id}`;
   window.setTimeout(() => {
     cleanup();
-    if (!handedOff && !document.hidden) window.location.href = template.url;
+    if (!handedOff && !document.hidden) window.open(template.url, "_blank");
   }, 1500);
 }
 
